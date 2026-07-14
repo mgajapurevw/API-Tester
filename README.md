@@ -6,10 +6,10 @@ A desktop API testing application built with [Electron](https://www.electronjs.o
 
 ## Prerequisites
 
-Make sure you have the following installed before building:
+Before building or running the app, make sure you have:
 
-- [Node.js](https://nodejs.org/) (v18 or later recommended)
-- [npm](https://www.npmjs.com/) (comes with Node.js)
+- [Node.js](https://nodejs.org/) **v18 or later**
+- [npm](https://www.npmjs.com/) (bundled with Node.js)
 
 ---
 
@@ -17,57 +17,122 @@ Make sure you have the following installed before building:
 
 Clone the repository and install dependencies:
 
-git clone <your-repo-url>
-cd api-tester
+```bash
+git clone https://github.com/mgajapurevw/API-Tester.git
+cd API-Tester
 npm install
+```
 
-## Building the Application
-This project uses electron-builder to package the application.
+---
 
-Install electron-builder (if not already added)
+## Run the App (Development)
 
+```bash
+npm start
+```
+
+---
+
+## Build the Application
+
+This project uses [`electron-builder`](https://www.electron.build/) to package the application.
+
+> If `electron-builder` is not already in your project dependencies, install it:
+
+```bash
 npm install --save-dev electron-builder
+```
 
-# Build for Windows
-Run on a Windows machine:
+### Build for Windows
 
+Run on a **Windows** machine:
+
+```bash
 npm run build:win
+```
 
 Or directly:
 
+```bash
 npx electron-builder --win
+```
 
-Generates a .exe installer inside the dist/ folder.
+This generates a `.exe` installer in the `dist/` folder.
 
-# Build for macOS
-Run on a macOS machine:
+### Build for macOS
 
+Run on a **macOS** machine:
+
+```bash
 npm run build:mac
+```
 
 Or directly:
 
+```bash
 npx electron-builder --mac
+```
 
-Generates a .dmg file inside the dist/ folder.
+This generates a `.dmg` file in the `dist/` folder.
 
-## Recommended package.json Scripts
+### Build for Linux
 
-"scripts": {
-  "start": "electron .",
-  "build:win": "electron-builder --win",
-  "build:mac": "electron-builder --mac",
-  "build:linux": "electron-builder --linux"
-}
+```bash
+npm run build:linux
+```
 
-Add a build config section:
+Or directly:
 
-"build": {
-  "appId": "com.yourcompany.api-testing-tool",
-  "productName": "API Testing Tool",
-  "win": {
-    "target": "nsis"
-  },
-  "mac": {
-    "target": "dmg"
+```bash
+npx electron-builder --linux
+```
+
+---
+
+## Recommended `package.json` Configuration
+
+Use the following scripts:
+
+```json
+{
+  "scripts": {
+    "start": "electron .",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux"
   }
 }
+```
+
+Add a `build` configuration section:
+
+```json
+{
+  "build": {
+    "appId": "com.yourcompany.api-testing-tool",
+    "productName": "API Testing Tool",
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  }
+}
+```
+
+---
+
+## Output
+
+Packaged installers are generated in the `dist/` directory.
+
+---
+
+## Notes
+
+- Cross-platform builds are best created on their respective OS (Windows on Windows, macOS on macOS, etc.).
+- Keep `electron-builder` and Electron versions compatible to avoid packaging issues.
