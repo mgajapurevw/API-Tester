@@ -17,7 +17,6 @@ Make sure you have the following installed before building:
 
 Clone the repository and install dependencies:
 
-```bash
 git clone <your-repo-url>
 cd api-tester
 npm install
@@ -27,18 +26,15 @@ This project uses electron-builder to package the application.
 
 Install electron-builder (if not already added)
 
-```bash
 npm install --save-dev electron-builder
 
 # Build for Windows
 Run on a Windows machine:
 
-```bash
 npm run build:win
 
 Or directly:
 
-```bash
 npx electron-builder --win
 
 Generates a .exe installer inside the dist/ folder.
@@ -46,19 +42,16 @@ Generates a .exe installer inside the dist/ folder.
 # Build for macOS
 Run on a macOS machine:
 
-```bash
 npm run build:mac
 
 Or directly:
 
-```bash
 npx electron-builder --mac
 
 Generates a .dmg file inside the dist/ folder.
 
 ## Recommended package.json Scripts
 
-```bash
 "scripts": {
   "start": "electron .",
   "build:win": "electron-builder --win",
@@ -68,7 +61,6 @@ Generates a .dmg file inside the dist/ folder.
 
 Add a build config section:
 
-```bash
 "build": {
   "appId": "com.yourcompany.api-testing-tool",
   "productName": "API Testing Tool",
