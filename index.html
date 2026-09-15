@@ -91,7 +91,11 @@
     <aside id="sidebar" class="flex flex-col bg-dark-800 border-r border-dark-500 overflow-hidden flex-shrink-0">
       <div class="flex items-center justify-between px-3 py-2 border-b border-dark-500">
         <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Collections</span>
-        <button onclick="newCollection()" title="New collection" class="text-orange-400 hover:text-orange-300 text-lg leading-none">+</button>
+        <div class="flex items-center gap-2">
+          <button onclick="triggerImportJson()" title="Import JSON" class="text-xs bg-dark-600 hover:bg-dark-500 border border-dark-500 rounded px-2 py-0.5 text-gray-300">Import</button>
+          <button onclick="exportDataAsJson()" title="Export JSON" class="text-xs bg-dark-600 hover:bg-dark-500 border border-dark-500 rounded px-2 py-0.5 text-gray-300">Export</button>
+          <button onclick="newCollection()" title="New collection" class="text-orange-400 hover:text-orange-300 text-lg leading-none">+</button>
+        </div>
       </div>
       <div id="collections-list" class="flex-1 overflow-y-auto text-sm"></div>
     </aside>
@@ -370,6 +374,8 @@
     </div>
   </div>
 
+  <input id="import-json-input" type="file" accept="application/json,.json" class="hidden" />
+
   <script>
   // ─── Inline prompt / confirm (replaces disabled browser dialogs in Electron) ──
   function showPrompt(title, defaultVal = '') {
@@ -468,6 +474,8 @@
       document.getElementById('cors-proxy-bar').style.display = 'none';
       document.getElementById('electron-badge').classList.remove('hidden');
     }
+
+    document.getElementById('import-json-input').addEventListener('change', handleImportJson);
   });
 
   function showFetchError(err) {
@@ -1373,6 +1381,132 @@
   }
 
   function saveCollections() { localStorage.setItem('collections', JSON.stringify(collections)); }
+
+  function normalizeKVArray(entries) {
+    if (!Array.isArray(entries)) return [];
+    return entries
+      .filter(e => e && typeof e === 'object')
+      .map(e => ({
+        key: String(e.key || ''),
+        value: String(e.value || '')
+      }))
+      .filter(e => e.key || e.value);
+  }
+
+  function normalizeAuth(auth) {
+    const safeAuth = auth && typeof auth === 'object' ? auth : {};
+    const type = ['none', 'bearer', 'basic', 'apikey'].includes(safeAuth.type) ? safeAuth.type : 'none';
+    const out = { type };
+    if (type === 'bearer') out.bearer = String(safeAuth.bearer || '');
+    if (type === 'basic') {
+      out.user = String(safeAuth.user || '');
+      out.pass = String(safeAuth.pass || '');
+    }
+    if (type === 'apikey') {
+      out.key = String(safeAuth.key || '');
+      out.val = String(safeAuth.val || '');
+      out.where = safeAuth.where === 'query' ? 'query' : 'header';
+    }
+    return out;
+  }
+
+  function normalizeCollections(input) {
+    if (!Array.isArray(input)) throw new Error('Invalid collections data.');
+    const bodyTypes = new Set(['none', 'json', 'raw', 'form', 'urlencoded', 'binary']);
+    return input
+      .filter(col => col && typeof col === 'object')
+      .map(col => ({
+        name: String(col.name || 'Untitled Collection'),
+        requests: (Array.isArray(col.requests) ? col.requests : [])
+          .filter(req => req && typeof req === 'object')
+          .map(req => {
+            const bodyType = bodyTypes.has(req.bodyType) ? req.bodyType : 'none';
+            return {
+              name: String(req.name || 'Untitled'),
+              method: String(req.method || 'GET').toUpperCase(),
+              url: String(req.url || ''),
+              bodyType,
+              body: String(req.body || ''),
+              auth: normalizeAuth(req.auth),
+              headers: normalizeKVArray(req.headers),
+              params: normalizeKVArray(req.params)
+            };
+          })
+      }));
+  }
+
+  function normalizeEnvironments(input) {
+    if (!Array.isArray(input)) throw new Error('Invalid environments data.');
+    return input
+      .filter(env => env && typeof env === 'object')
+      .map(env => {
+        const vars = {};
+        if (env.vars && typeof env.vars === 'object') {
+          Object.entries(env.vars).forEach(([k, v]) => {
+            vars[String(k)] = String(v ?? '');
+          });
+        }
+        return {
+          name: String(env.name || 'Untitled Environment'),
+          vars
+        };
+      });
+  }
+
+  function exportDataAsJson() {
+    const payload = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      collections,
+      environments
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `api-tester-data-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  function triggerImportJson() {
+    document.getElementById('import-json-input').click();
+  }
+
+  async function handleImportJson(e) {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+
+      const hasCollections = Array.isArray(parsed) || Array.isArray(parsed.collections);
+      const hasEnvironments = !!parsed && Array.isArray(parsed.environments);
+      if (!hasCollections && !hasEnvironments) {
+        throw new Error('JSON must contain a collections array, environments array, or both.');
+      }
+
+      if (hasCollections) collections = normalizeCollections(Array.isArray(parsed) ? parsed : parsed.collections);
+      if (hasEnvironments) environments = normalizeEnvironments(parsed.environments);
+
+      if (activeEnvIndex >= environments.length) activeEnvIndex = -1;
+      if (editingEnvIndex >= environments.length) editingEnvIndex = -1;
+
+      saveCollections();
+      saveEnvironments();
+      renderCollections();
+      renderEnvSelect();
+
+      if (editingEnvIndex === -1) {
+        document.getElementById('env-editor-area').innerHTML = '<div class="text-gray-500 text-sm">Select an environment to edit.</div>';
+      }
+
+      alert(`Import complete. Collections: ${collections.length}, Environments: ${environments.length}`);
+    } catch (err) {
+      alert(`Import failed: ${err.message}`);
+    } finally {
+      e.target.value = '';
+    }
+  }
 
   // ─── Environments ─────────────────────────────────────────────────────────────
   let editingEnvIndex = -1;

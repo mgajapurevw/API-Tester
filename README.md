@@ -33,6 +33,13 @@ npm start
 
 ---
 
+## Import / Export JSON
+
+- Use **Import** in the Collections panel to load saved app data from a `.json` file.
+- Use **Export** to download current collections and environments as JSON.
+
+---
+
 ## Build the Application
 
 This project uses [`electron-builder`](https://www.electron.build/) to package the application.
