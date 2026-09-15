@@ -550,7 +550,8 @@
   }
 
   function uid(prefix) {
-    return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    if (window.crypto?.randomUUID) return `${prefix}-${window.crypto.randomUUID()}`;
+    return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
   }
 
   function ensureCollectionIds() {
@@ -1317,7 +1318,6 @@
         return;
       }
       activeTab.savedRef = null;
-      activeTab.title = 'New Request';
       renderRequestTabs();
     }
 
@@ -1334,6 +1334,11 @@
   function confirmSave() {
     const name = document.getElementById('save-req-name').value.trim() || 'Untitled';
     const ci = parseInt(document.getElementById('save-collection-select').value);
+    if (Number.isNaN(ci) || !collections[ci]) {
+      closeSaveModal();
+      alert('Selected collection is no longer available. Please select again.');
+      return;
+    }
     syncActiveTabData();
     const activeTab = getActiveRequestTab();
     if (!activeTab) return;
