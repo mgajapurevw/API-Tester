@@ -719,7 +719,7 @@
         closeRequestTab(tab.id);
       };
       closeBtn.onkeydown = (event) => {
-        event.stopPropagation();
+        if (event.key === 'Enter' || event.key === ' ') event.stopPropagation();
       };
       btn.appendChild(title);
       btn.appendChild(closeBtn);
@@ -1313,7 +1313,9 @@
       const location = findSavedRequestLocation(activeTab.savedRef);
       if (location) {
         const existingName = collections[location.ci].requests[location.ri].name || activeTab.savedRef.name || 'Untitled';
-        collections[location.ci].requests[location.ri] = buildStoredRequest(existingName, activeTab.request, activeTab.savedRef.requestId);
+        const existingReq = collections[location.ci].requests[location.ri];
+        const updatedReq = buildStoredRequest(existingName, activeTab.request, activeTab.savedRef.requestId);
+        collections[location.ci].requests[location.ri] = { ...existingReq, ...updatedReq };
         activeTab.title = existingName;
         activeTab.savedRef.name = existingName;
         saveCollections();
@@ -1346,6 +1348,7 @@
     syncActiveTabData();
     const activeTab = getActiveRequestTab();
     if (!activeTab) return;
+    activeTab.savedRef = null;
 
     const savedReq = buildStoredRequest(name, activeTab.request);
     collections[ci].requests.push(savedReq);
