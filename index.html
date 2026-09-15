@@ -724,7 +724,7 @@
 
   function createNewRequestTab(tabData = null) {
     syncActiveTabData();
-    const tab = tabData || {
+    const tab = tabData ? clone(tabData) : {
       id: nextRequestTabId++,
       title: 'New Request',
       request: getEmptyRequestData(),
@@ -1300,8 +1300,11 @@
       if (location) {
         const existingName = collections[location.ci].requests[location.ri].name || activeTab.savedRef.name || 'Untitled';
         collections[location.ci].requests[location.ri] = buildStoredRequest(existingName, activeTab.request, activeTab.savedRef.requestId);
+        activeTab.title = existingName;
+        activeTab.savedRef.name = existingName;
         saveCollections();
         renderCollections();
+        renderRequestTabs();
         return;
       }
       activeTab.savedRef = null;
