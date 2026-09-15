@@ -704,10 +704,20 @@
       const active = tab.id === activeRequestTabId;
       btn.className = `workspace-tab ${active ? 'workspace-tab-active' : ''} text-xs rounded px-2 py-1 flex items-center gap-2 max-w-64`;
       btn.onclick = () => switchRequestTab(tab.id);
-      btn.innerHTML = `
-        <span class="truncate">${escHtml(tab.title || 'New Request')}</span>
-        <span class="text-gray-500 hover:text-red-400" onclick="event.stopPropagation();closeRequestTab(${tab.id})">✕</span>
-      `;
+      const title = document.createElement('span');
+      title.className = 'truncate';
+      title.textContent = tab.title || 'New Request';
+      const closeBtn = document.createElement('button');
+      closeBtn.type = 'button';
+      closeBtn.className = 'text-gray-500 hover:text-red-400';
+      closeBtn.setAttribute('aria-label', `Close ${tab.title || 'New Request'} tab`);
+      closeBtn.textContent = '✕';
+      closeBtn.onclick = (event) => {
+        event.stopPropagation();
+        closeRequestTab(tab.id);
+      };
+      btn.appendChild(title);
+      btn.appendChild(closeBtn);
       list.appendChild(btn);
     });
   }
@@ -730,7 +740,13 @@
       request: getEmptyRequestData(),
       savedRef: null
     };
-    if (!tab.id) tab.id = nextRequestTabId++;
+    const existingId = Number(tab.id);
+    if (!Number.isInteger(existingId) || existingId <= 0) {
+      tab.id = nextRequestTabId++;
+    } else {
+      tab.id = existingId;
+      if (tab.id >= nextRequestTabId) nextRequestTabId = tab.id + 1;
+    }
     requestTabs.push(tab);
     activeRequestTabId = tab.id;
     applyRequestDataToUI(tab.request);
