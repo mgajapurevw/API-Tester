@@ -775,6 +775,12 @@
     return null;
   }
 
+  function markTabUnsaved(tab) {
+    tab.savedRef = null;
+    if (!tab.title || tab.title === 'New Request') return;
+    if (!tab.title.endsWith(' (unsaved)')) tab.title = `${tab.title} (unsaved)`;
+  }
+
   function buildStoredRequest(name, data, existingId = null) {
     const bodyType = data.bodyType || 'none';
     let body = '';
@@ -1269,7 +1275,7 @@
     const deletedCollectionId = collections[ci].id;
     collections.splice(ci, 1);
     requestTabs.forEach(tab => {
-      if (tab.savedRef?.collectionId === deletedCollectionId) tab.savedRef = null;
+      if (tab.savedRef?.collectionId === deletedCollectionId) markTabUnsaved(tab);
     });
     saveCollections();
     renderCollections();
@@ -1281,7 +1287,7 @@
     const colId = collections[ci].id;
     collections[ci].requests.splice(ri, 1);
     requestTabs.forEach(tab => {
-      if (tab.savedRef?.collectionId === colId && tab.savedRef?.requestId === reqId) tab.savedRef = null;
+      if (tab.savedRef?.collectionId === colId && tab.savedRef?.requestId === reqId) markTabUnsaved(tab);
     });
     saveCollections();
     renderCollections();
@@ -1301,7 +1307,7 @@
     });
   }
 
-  function saveToCollection() {
+  async function saveToCollection() {
     syncActiveTabData();
     const activeTab = getActiveRequestTab();
     if (!activeTab) return;
@@ -1320,7 +1326,8 @@
         renderRequestTabs();
         return;
       }
-      activeTab.savedRef = null;
+      if (!await showConfirm('Saved request no longer exists. Save this tab as a new request?')) return;
+      markTabUnsaved(activeTab);
       renderRequestTabs();
     }
 
