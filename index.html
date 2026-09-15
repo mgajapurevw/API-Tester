@@ -749,6 +749,7 @@
   }
 
   function closeRequestTab(tabId) {
+    if (tabId === activeRequestTabId) syncActiveTabData();
     const idx = requestTabs.findIndex(t => t.id === tabId);
     if (idx === -1) return;
     requestTabs.splice(idx, 1);
