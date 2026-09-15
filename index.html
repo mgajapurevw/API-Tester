@@ -718,6 +718,9 @@
         event.stopPropagation();
         closeRequestTab(tab.id);
       };
+      closeBtn.onkeydown = (event) => {
+        event.stopPropagation();
+      };
       btn.appendChild(title);
       btn.appendChild(closeBtn);
       list.appendChild(btn);
