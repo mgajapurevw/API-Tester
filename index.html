@@ -710,6 +710,7 @@
       const closeBtn = document.createElement('button');
       closeBtn.type = 'button';
       closeBtn.className = 'text-gray-500 hover:text-red-400';
+      closeBtn.title = 'Close tab';
       closeBtn.setAttribute('aria-label', `Close ${tab.title || 'New Request'} tab`);
       closeBtn.textContent = '✕';
       closeBtn.onclick = (event) => {
@@ -1295,7 +1296,6 @@
   function loadRequest(ci, ri) {
     const req = collections[ci].requests[ri];
     createNewRequestTab({
-      id: nextRequestTabId++,
       title: req.name || 'Untitled',
       request: getRequestDataFromCollection(req),
       savedRef: {
