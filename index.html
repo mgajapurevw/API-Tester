@@ -61,6 +61,8 @@
     .env-badge { font-size: 10px; padding: 1px 6px; border-radius: 9999px; }
     select option { background: #161b22; }
     .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #30363d; border-top-color: #f0883e; border-radius: 50%; animation: spin .7s linear infinite; }
+    .workspace-tab { border: 1px solid #30363d; background: #161b22; color: #8b949e; }
+    .workspace-tab-active { border-color: #f0883e; color: #f0883e; background: #1c2230; }
     @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
@@ -99,6 +101,12 @@
 
     <!-- Main panel -->
     <main id="main-panel" class="flex flex-col overflow-hidden">
+
+      <!-- Request workspace tabs -->
+      <div class="flex items-center gap-2 px-3 py-2 border-b border-dark-500 bg-dark-800 flex-shrink-0">
+        <div id="request-tabs-list" class="flex items-center gap-2 overflow-x-auto flex-1"></div>
+        <button onclick="createNewRequestTab()" title="New request tab" class="bg-dark-600 hover:bg-dark-500 border border-dark-500 text-gray-300 px-2 py-1 rounded text-xs">+ New Tab</button>
+      </div>
 
       <!-- Request URL bar -->
       <div class="flex flex-col border-b border-dark-500 bg-dark-800 flex-shrink-0">
@@ -420,6 +428,11 @@
   let bodyJsonEditor = null;
   let prereqEditor = null;
   let testsEditor = null;
+  let requestTabs = [];
+  let activeRequestTabId = null;
+  let nextRequestTabId = 1;
+  const DEFAULT_PREREQ_SCRIPT = '// Pre-request script\n// pm.environment.set("token", "abc123");\n';
+  const DEFAULT_TESTS_SCRIPT = '// Tests\npm.test("Status is 200", function() {\n  pm.expect(pm.response.status).to.equal(200);\n});\n';
 
   // ─── CodeMirror init ──────────────────────────────────────────────────────────
   function initEditors() {
@@ -435,21 +448,20 @@
     });
     prereqEditor = CodeMirror(document.getElementById('prereq-editor'), {
       mode: 'javascript', theme: 'dracula', lineNumbers: true, lineWrapping: true,
-      value: '// Pre-request script\n// pm.environment.set("token", "abc123");\n'
+      value: DEFAULT_PREREQ_SCRIPT
     });
     testsEditor = CodeMirror(document.getElementById('tests-editor'), {
       mode: 'javascript', theme: 'dracula', lineNumbers: true, lineWrapping: true,
-      value: '// Tests\npm.test("Status is 200", function() {\n  pm.expect(pm.response.status).to.equal(200);\n});\n'
+      value: DEFAULT_TESTS_SCRIPT
     });
   }
 
   window.addEventListener('DOMContentLoaded', () => {
     initEditors();
+    ensureCollectionIds();
     renderCollections();
     renderEnvSelect();
-    addKVRow('params-table', syncParamsToUrl);
-    addKVRow('headers-table', null);
-    switchAuthUI();
+    createNewRequestTab();
 
     // Detect Electron: hide CORS proxy bar, show native badge
     if (window.electronAPI?.isElectron) {
@@ -535,6 +547,244 @@
       return base ? `${base}${encodeURIComponent(url)}` : url;
     }
     return url;
+  }
+
+  function uid(prefix) {
+    return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  function ensureCollectionIds() {
+    let changed = false;
+    collections.forEach(col => {
+      if (!col.id) { col.id = uid('col'); changed = true; }
+      (col.requests || []).forEach(req => {
+        if (!req.id) { req.id = uid('req'); changed = true; }
+      });
+    });
+    if (changed) saveCollections();
+  }
+
+  function clone(obj) {
+    return JSON.parse(JSON.stringify(obj));
+  }
+
+  function getEmptyRequestData() {
+    return {
+      method: 'GET',
+      url: '',
+      headers: [],
+      params: [],
+      bodyType: 'none',
+      bodyJson: '{\n  \n}',
+      bodyRaw: '',
+      form: [],
+      urlencoded: [],
+      auth: { type: 'none' },
+      prereqScript: DEFAULT_PREREQ_SCRIPT,
+      testsScript: DEFAULT_TESTS_SCRIPT
+    };
+  }
+
+  function getRequestDataFromCollection(req) {
+    const data = getEmptyRequestData();
+    data.method = req.method || 'GET';
+    data.url = req.url || '';
+    data.headers = clone(req.headers || []);
+    data.params = clone(req.params || []);
+    data.bodyType = req.bodyType || 'none';
+    data.bodyJson = req.bodyJson || (req.bodyType === 'json' ? (req.body || '{\n  \n}') : '{\n  \n}');
+    data.bodyRaw = req.bodyRaw || (req.bodyType === 'raw' ? (req.body || '') : '');
+    data.form = clone(req.form || []);
+    data.urlencoded = clone(req.urlencoded || []);
+    data.auth = clone(req.auth || { type: 'none' });
+    data.prereqScript = req.prereqScript || DEFAULT_PREREQ_SCRIPT;
+    data.testsScript = req.testsScript || DEFAULT_TESTS_SCRIPT;
+    return data;
+  }
+
+  function collectAuthData() {
+    const authType = document.getElementById('auth-type').value;
+    const auth = { type: authType };
+    if (authType === 'bearer') auth.bearer = document.getElementById('auth-bearer')?.value || '';
+    if (authType === 'basic') {
+      auth.user = document.getElementById('auth-user')?.value || '';
+      auth.pass = document.getElementById('auth-pass')?.value || '';
+    }
+    if (authType === 'apikey') {
+      auth.key = document.getElementById('auth-api-key')?.value || '';
+      auth.val = document.getElementById('auth-api-val')?.value || '';
+      auth.where = document.getElementById('auth-api-where')?.value || 'header';
+    }
+    return auth;
+  }
+
+  function collectCurrentRequestData() {
+    const bodyType = document.querySelector('input[name="body-type"]:checked')?.value || 'none';
+    return {
+      method: document.getElementById('method-select').value,
+      url: document.getElementById('url-input').value,
+      headers: getKVRows('headers-table'),
+      params: getKVRows('params-table'),
+      bodyType,
+      bodyJson: bodyJsonEditor ? bodyJsonEditor.getValue() : '{\n  \n}',
+      bodyRaw: document.getElementById('body-raw-input').value || '',
+      form: getKVRows('form-table'),
+      urlencoded: getKVRows('urlencoded-table'),
+      auth: collectAuthData(),
+      prereqScript: prereqEditor ? prereqEditor.getValue() : DEFAULT_PREREQ_SCRIPT,
+      testsScript: testsEditor ? testsEditor.getValue() : DEFAULT_TESTS_SCRIPT
+    };
+  }
+
+  function setKVRows(tableId, rows, onChange, isFile = false) {
+    const table = document.getElementById(tableId);
+    table.innerHTML = '';
+    (rows || []).forEach(item => {
+      const row = addKVRow(tableId, onChange, isFile);
+      row.querySelector('.kv-key').value = item.key || '';
+      const valEl = row.querySelector('.kv-val');
+      if (valEl && valEl.type !== 'file') valEl.value = item.value || '';
+    });
+    addKVRow(tableId, onChange, isFile);
+  }
+
+  function applyRequestDataToUI(data) {
+    const req = data || getEmptyRequestData();
+    document.getElementById('url-input').value = req.url || '';
+    document.getElementById('method-select').value = req.method || 'GET';
+    updateMethodColor();
+
+    setKVRows('headers-table', req.headers, null);
+    setKVRows('params-table', req.params, syncParamsToUrl);
+    setKVRows('form-table', req.form, null, true);
+    setKVRows('urlencoded-table', req.urlencoded, null);
+
+    const bodyType = req.bodyType || 'none';
+    const bodyRadio = document.querySelector(`input[name="body-type"][value="${bodyType}"]`) || document.querySelector('input[name="body-type"][value="none"]');
+    if (bodyRadio) bodyRadio.checked = true;
+    switchBodyUI(bodyRadio ? bodyRadio.value : 'none');
+    if (bodyJsonEditor) bodyJsonEditor.setValue(req.bodyJson || '{\n  \n}');
+    document.getElementById('body-raw-input').value = req.bodyRaw || '';
+
+    const auth = req.auth || { type: 'none' };
+    const authType = auth.type || 'none';
+    document.getElementById('auth-type').value = authType;
+    switchAuthUI();
+    if (authType === 'bearer' && document.getElementById('auth-bearer')) document.getElementById('auth-bearer').value = auth.bearer || '';
+    if (authType === 'basic') {
+      if (document.getElementById('auth-user')) document.getElementById('auth-user').value = auth.user || '';
+      if (document.getElementById('auth-pass')) document.getElementById('auth-pass').value = auth.pass || '';
+    }
+    if (authType === 'apikey') {
+      if (document.getElementById('auth-api-key')) document.getElementById('auth-api-key').value = auth.key || '';
+      if (document.getElementById('auth-api-val')) document.getElementById('auth-api-val').value = auth.val || '';
+      if (document.getElementById('auth-api-where')) document.getElementById('auth-api-where').value = auth.where || 'header';
+    }
+
+    if (prereqEditor) prereqEditor.setValue(req.prereqScript || DEFAULT_PREREQ_SCRIPT);
+    if (testsEditor) testsEditor.setValue(req.testsScript || DEFAULT_TESTS_SCRIPT);
+    showReqTab('params');
+  }
+
+  function getActiveRequestTab() {
+    return requestTabs.find(t => t.id === activeRequestTabId) || null;
+  }
+
+  function syncActiveTabData() {
+    const tab = getActiveRequestTab();
+    if (!tab) return;
+    tab.request = collectCurrentRequestData();
+  }
+
+  function renderRequestTabs() {
+    const list = document.getElementById('request-tabs-list');
+    list.innerHTML = '';
+    requestTabs.forEach(tab => {
+      const btn = document.createElement('button');
+      const active = tab.id === activeRequestTabId;
+      btn.className = `workspace-tab ${active ? 'workspace-tab-active' : ''} text-xs rounded px-2 py-1 flex items-center gap-2 max-w-64`;
+      btn.onclick = () => switchRequestTab(tab.id);
+      btn.innerHTML = `
+        <span class="truncate">${escHtml(tab.title || 'New Request')}</span>
+        <span class="text-gray-500 hover:text-red-400" onclick="event.stopPropagation();closeRequestTab(${tab.id})">✕</span>
+      `;
+      list.appendChild(btn);
+    });
+  }
+
+  function switchRequestTab(tabId) {
+    if (tabId === activeRequestTabId) return;
+    syncActiveTabData();
+    const tab = requestTabs.find(t => t.id === tabId);
+    if (!tab) return;
+    activeRequestTabId = tabId;
+    applyRequestDataToUI(tab.request);
+    renderRequestTabs();
+  }
+
+  function createNewRequestTab(tabData = null) {
+    syncActiveTabData();
+    const tab = tabData || {
+      id: nextRequestTabId++,
+      title: 'New Request',
+      request: getEmptyRequestData(),
+      savedRef: null
+    };
+    if (!tab.id) tab.id = nextRequestTabId++;
+    requestTabs.push(tab);
+    activeRequestTabId = tab.id;
+    applyRequestDataToUI(tab.request);
+    renderRequestTabs();
+  }
+
+  function closeRequestTab(tabId) {
+    const idx = requestTabs.findIndex(t => t.id === tabId);
+    if (idx === -1) return;
+    requestTabs.splice(idx, 1);
+    if (requestTabs.length === 0) {
+      createNewRequestTab();
+      return;
+    }
+    if (activeRequestTabId === tabId) {
+      const fallback = requestTabs[Math.max(0, idx - 1)];
+      activeRequestTabId = fallback.id;
+      applyRequestDataToUI(fallback.request);
+    }
+    renderRequestTabs();
+  }
+
+  function findSavedRequestLocation(savedRef) {
+    if (!savedRef) return null;
+    for (let ci = 0; ci < collections.length; ci++) {
+      if (collections[ci].id !== savedRef.collectionId) continue;
+      const ri = (collections[ci].requests || []).findIndex(r => r.id === savedRef.requestId);
+      if (ri >= 0) return { ci, ri };
+    }
+    return null;
+  }
+
+  function buildStoredRequest(name, data, existingId = null) {
+    const bodyType = data.bodyType || 'none';
+    let body = '';
+    if (bodyType === 'json') body = data.bodyJson || '';
+    if (bodyType === 'raw') body = data.bodyRaw || '';
+    return {
+      id: existingId || uid('req'),
+      name: name || 'Untitled',
+      method: data.method,
+      url: data.url,
+      bodyType,
+      body,
+      bodyJson: data.bodyJson || '',
+      bodyRaw: data.bodyRaw || '',
+      form: clone(data.form || []),
+      urlencoded: clone(data.urlencoded || []),
+      auth: clone(data.auth || { type: 'none' }),
+      prereqScript: data.prereqScript || DEFAULT_PREREQ_SCRIPT,
+      testsScript: data.testsScript || DEFAULT_TESTS_SCRIPT,
+      headers: clone(data.headers || []),
+      params: clone(data.params || [])
+    };
   }
 
   // ─── Tabs ─────────────────────────────────────────────────────────────────────
@@ -997,82 +1247,70 @@
   async function newCollection() {
     const name = await showPrompt('Collection name:');
     if (!name) return;
-    collections.push({ name, requests: [] });
+    collections.push({ id: uid('col'), name, requests: [] });
     saveCollections();
     renderCollections();
   }
 
   async function deleteCollection(ci) {
     if (!await showConfirm(`Delete collection "${collections[ci].name}"?`)) return;
+    const deletedCollectionId = collections[ci].id;
     collections.splice(ci, 1);
+    requestTabs.forEach(tab => {
+      if (tab.savedRef?.collectionId === deletedCollectionId) tab.savedRef = null;
+    });
     saveCollections();
     renderCollections();
+    renderRequestTabs();
   }
 
   function deleteRequest(ci, ri) {
+    const reqId = collections[ci].requests[ri].id;
+    const colId = collections[ci].id;
     collections[ci].requests.splice(ri, 1);
+    requestTabs.forEach(tab => {
+      if (tab.savedRef?.collectionId === colId && tab.savedRef?.requestId === reqId) tab.savedRef = null;
+    });
     saveCollections();
     renderCollections();
+    renderRequestTabs();
   }
 
   function loadRequest(ci, ri) {
     const req = collections[ci].requests[ri];
-    document.getElementById('url-input').value = req.url || '';
-    const sel = document.getElementById('method-select');
-    sel.value = req.method || 'GET';
-    updateMethodColor();
-
-    // Headers
-    const ht = document.getElementById('headers-table');
-    ht.innerHTML = '';
-    (req.headers || []).forEach(h => {
-      const row = addKVRow('headers-table', null);
-      row.querySelector('.kv-key').value = h.key;
-      row.querySelector('.kv-val').value = h.value;
-    });
-    addKVRow('headers-table', null);
-
-    // Params
-    const pt = document.getElementById('params-table');
-    pt.innerHTML = '';
-    (req.params || []).forEach(p => {
-      const row = addKVRow('params-table', syncParamsToUrl);
-      row.querySelector('.kv-key').value = p.key;
-      row.querySelector('.kv-val').value = p.value;
-    });
-    addKVRow('params-table', syncParamsToUrl);
-
-    // Body
-    if (req.bodyType) {
-      const radio = document.querySelector(`input[name="body-type"][value="${req.bodyType}"]`);
-      if (radio) { radio.checked = true; switchBodyUI(req.bodyType); }
-      if (req.bodyType === 'json' && req.body) bodyJsonEditor.setValue(req.body);
-      if (req.bodyType === 'raw' && req.body) document.getElementById('body-raw-input').value = req.body;
-    }
-
-    // Auth
-    if (req.auth) {
-      const authSel = document.getElementById('auth-type');
-      authSel.value = req.auth.type || 'none';
-      switchAuthUI();
-      if (req.auth.type === 'bearer' && document.getElementById('auth-bearer')) {
-        document.getElementById('auth-bearer').value = req.auth.bearer || '';
-      } else if (req.auth.type === 'basic') {
-        if (document.getElementById('auth-user')) document.getElementById('auth-user').value = req.auth.user || '';
-        if (document.getElementById('auth-pass')) document.getElementById('auth-pass').value = req.auth.pass || '';
-      } else if (req.auth.type === 'apikey') {
-        if (document.getElementById('auth-api-key'))   document.getElementById('auth-api-key').value  = req.auth.key   || '';
-        if (document.getElementById('auth-api-val'))   document.getElementById('auth-api-val').value  = req.auth.val   || '';
-        if (document.getElementById('auth-api-where')) document.getElementById('auth-api-where').value = req.auth.where || 'header';
+    createNewRequestTab({
+      id: nextRequestTabId++,
+      title: req.name || 'Untitled',
+      request: getRequestDataFromCollection(req),
+      savedRef: {
+        collectionId: collections[ci].id,
+        requestId: req.id,
+        name: req.name || 'Untitled'
       }
-    }
+    });
   }
 
   function saveToCollection() {
+    syncActiveTabData();
+    const activeTab = getActiveRequestTab();
+    if (!activeTab) return;
+
+    if (activeTab.savedRef) {
+      const location = findSavedRequestLocation(activeTab.savedRef);
+      if (location) {
+        const existingName = collections[location.ci].requests[location.ri].name || activeTab.savedRef.name || 'Untitled';
+        collections[location.ci].requests[location.ri] = buildStoredRequest(existingName, activeTab.request, activeTab.savedRef.requestId);
+        saveCollections();
+        renderCollections();
+        return;
+      }
+      activeTab.savedRef = null;
+    }
+
     if (collections.length === 0) { alert('Create a collection first.'); return; }
     const sel = document.getElementById('save-collection-select');
     sel.innerHTML = collections.map((c, i) => `<option value="${i}">${escHtml(c.name)}</option>`).join('');
-    document.getElementById('save-req-name').value = '';
+    document.getElementById('save-req-name').value = activeTab.title === 'New Request' ? '' : activeTab.title;
     document.getElementById('save-modal').classList.remove('hidden');
   }
 
@@ -1081,34 +1319,17 @@
   function confirmSave() {
     const name = document.getElementById('save-req-name').value.trim() || 'Untitled';
     const ci = parseInt(document.getElementById('save-collection-select').value);
-    const method = document.getElementById('method-select').value;
-    const url = document.getElementById('url-input').value;
-    const bodyType = document.querySelector('input[name="body-type"]:checked')?.value || 'none';
-    let body = '';
-    if (bodyType === 'json') body = bodyJsonEditor.getValue();
-    if (bodyType === 'raw') body = document.getElementById('body-raw-input').value;
+    syncActiveTabData();
+    const activeTab = getActiveRequestTab();
+    if (!activeTab) return;
 
-    // Capture auth
-    const authType = document.getElementById('auth-type').value;
-    const auth = { type: authType };
-    if (authType === 'bearer') {
-      auth.bearer = document.getElementById('auth-bearer')?.value || '';
-    } else if (authType === 'basic') {
-      auth.user = document.getElementById('auth-user')?.value || '';
-      auth.pass = document.getElementById('auth-pass')?.value || '';
-    } else if (authType === 'apikey') {
-      auth.key  = document.getElementById('auth-api-key')?.value || '';
-      auth.val  = document.getElementById('auth-api-val')?.value || '';
-      auth.where = document.getElementById('auth-api-where')?.value || 'header';
-    }
-
-    collections[ci].requests.push({
-      name, method, url, bodyType, body, auth,
-      headers: getKVRows('headers-table'),
-      params: getKVRows('params-table')
-    });
+    const savedReq = buildStoredRequest(name, activeTab.request);
+    collections[ci].requests.push(savedReq);
+    activeTab.savedRef = { collectionId: collections[ci].id, requestId: savedReq.id, name };
+    activeTab.title = name;
     saveCollections();
     renderCollections();
+    renderRequestTabs();
     closeSaveModal();
   }
 
