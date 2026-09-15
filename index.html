@@ -736,18 +736,11 @@
   function createNewRequestTab(tabData = null) {
     syncActiveTabData();
     const tab = tabData ? clone(tabData) : {
-      id: nextRequestTabId++,
       title: 'New Request',
       request: getEmptyRequestData(),
       savedRef: null
     };
-    const existingId = Number(tab.id);
-    if (!Number.isInteger(existingId) || existingId <= 0) {
-      tab.id = nextRequestTabId++;
-    } else {
-      tab.id = existingId;
-      if (tab.id >= nextRequestTabId) nextRequestTabId = tab.id + 1;
-    }
+    tab.id = nextRequestTabId++;
     requestTabs.push(tab);
     activeRequestTabId = tab.id;
     applyRequestDataToUI(tab.request);
@@ -1324,6 +1317,8 @@
         return;
       }
       activeTab.savedRef = null;
+      activeTab.title = 'New Request';
+      renderRequestTabs();
     }
 
     if (collections.length === 0) { alert('Create a collection first.'); return; }
