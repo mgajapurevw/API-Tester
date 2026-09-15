@@ -718,9 +718,6 @@
         event.stopPropagation();
         closeRequestTab(tab.id);
       };
-      closeBtn.onkeydown = (event) => {
-        if (event.key === 'Enter' || event.key === ' ') event.stopPropagation();
-      };
       btn.appendChild(title);
       btn.appendChild(closeBtn);
       list.appendChild(btn);
