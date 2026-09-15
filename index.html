@@ -1324,6 +1324,7 @@
     if (collections.length === 0) { alert('Create a collection first.'); return; }
     const sel = document.getElementById('save-collection-select');
     sel.innerHTML = collections.map((c, i) => `<option value="${i}">${escHtml(c.name)}</option>`).join('');
+    sel.value = '0';
     document.getElementById('save-req-name').value = activeTab.title === 'New Request' ? '' : activeTab.title;
     document.getElementById('save-modal').classList.remove('hidden');
   }
