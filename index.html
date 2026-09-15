@@ -701,10 +701,18 @@
     const list = document.getElementById('request-tabs-list');
     list.innerHTML = '';
     requestTabs.forEach(tab => {
-      const btn = document.createElement('button');
+      const row = document.createElement('div');
       const active = tab.id === activeRequestTabId;
-      btn.className = `workspace-tab ${active ? 'workspace-tab-active' : ''} text-xs rounded px-2 py-1 flex items-center gap-2 max-w-64`;
-      btn.onclick = () => switchRequestTab(tab.id);
+      row.className = `workspace-tab ${active ? 'workspace-tab-active' : ''} text-xs rounded px-2 py-1 flex items-center gap-2 max-w-64`;
+      row.setAttribute('role', 'button');
+      row.setAttribute('tabindex', '0');
+      row.onclick = () => switchRequestTab(tab.id);
+      row.onkeydown = (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          switchRequestTab(tab.id);
+        }
+      };
       const title = document.createElement('span');
       title.className = 'truncate';
       title.textContent = tab.title || 'New Request';
@@ -718,9 +726,9 @@
         event.stopPropagation();
         closeRequestTab(tab.id);
       };
-      btn.appendChild(title);
-      btn.appendChild(closeBtn);
-      list.appendChild(btn);
+      row.appendChild(title);
+      row.appendChild(closeBtn);
+      list.appendChild(row);
     });
   }
 
